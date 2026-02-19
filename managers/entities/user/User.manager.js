@@ -16,15 +16,52 @@ module.exports = class User {
         ];
     }
 
-    async register({ username, email, password, role = 'school_admin', schoolId, __longToken }) {
+    async register({ username, email, password, role = 'school_admin', schoolId, longToken, req }) {
         // Validation
         const validationResult = await this.validators.user.register({ username, email, password, role });
         if (validationResult) return validationResult;
 
-        // Only superadmins can create other users (or allow public registration for school_admin)
-        // For this implementation, we'll allow public registration for school_admin role only
-        if (role === 'superadmin' && (!__longToken || __longToken.role !== 'superadmin')) {
-            return { errors: 'Only existing superadmins can create new superadmin accounts' };
+        // Check for existing superadmin token if trying to create superadmin
+        let existingSuperadminToken = null;
+        if (role === 'superadmin') {
+            // Check if there are any existing superadmins
+            const existingSuperadmin = await this.User.findOne({ role: 'superadmin', isActive: true });
+            
+            // If superadmins exist, require authentication
+            if (existingSuperadmin) {
+                // Try to get token from request header
+                if (req && req.headers && req.headers.token) {
+                    try {
+                        const decoded = this.tokenManager.verifyShortToken({ token: req.headers.token });
+                        if (decoded && decoded.role === 'superadmin') {
+                            existingSuperadminToken = decoded;
+                        }
+                    } catch (err) {
+                        // Token invalid, ignore
+                    }
+                }
+                // Also check if longToken was passed in body (for API calls)
+                if (longToken) {
+                    try {
+                        const decoded = this.tokenManager.verifyLongToken({ token: longToken });
+                        if (decoded) {
+                            // Fetch user to get role
+                            const user = await this.User.findById(decoded.userId);
+                            if (user && user.role === 'superadmin') {
+                                existingSuperadminToken = { role: 'superadmin', userId: user._id.toString() };
+                            }
+                        }
+                    } catch (err) {
+                        // Token invalid, ignore
+                    }
+                }
+                
+                // Only existing superadmins can create new superadmin accounts
+                if (!existingSuperadminToken) {
+                    return { errors: 'Only existing superadmins can create new superadmin accounts' };
+                }
+            }
+            // If no superadmins exist, allow creating the first one (bootstrap)
         }
 
         try {
@@ -45,7 +82,7 @@ module.exports = class User {
             };
 
             // Only superadmins can assign schoolId during registration
-            if (schoolId && __longToken && __longToken.role === 'superadmin') {
+            if (schoolId && existingSuperadminToken && existingSuperadminToken.role === 'superadmin') {
                 userData.schoolId = schoolId;
             }
 
