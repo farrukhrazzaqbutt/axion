@@ -21,6 +21,16 @@ module.exports = class UserServer {
         app.use(express.urlencoded({ extended: true}));
         app.use('/static', express.static('public'));
 
+        /** root route - so visiting the URL shows something useful */
+        app.get('/', (req, res) => {
+            res.type('application/json').status(200).json({
+                service: (this.config.dotEnv.SERVICE_NAME || 'axion').toUpperCase(),
+                message: 'School Management API',
+                docs: '/api - use POST/GET/PUT/DELETE with path /api/:moduleName/:fnName',
+                example: 'POST /api/user/register or GET /api/school/getAllSchools',
+            });
+        });
+
         /** an error handler */
         app.use((err, req, res, next) => {
             console.error(err.stack)
