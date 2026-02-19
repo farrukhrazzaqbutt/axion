@@ -10,13 +10,20 @@ const ADMIN_URL                        = process.env.ADMIN_URL || `http://localh
 const ENV                              = process.env.ENV || "development";
 const REDIS_URI                        = process.env.REDIS_URI || "redis://127.0.0.1:6379";
 
-const CORTEX_REDIS                     = process.env.CORTEX_REDIS || REDIS_URI;
+// Upstash (and similar) require TLS; rewrite redis:// -> rediss:// so all Redis clients use TLS
+const ensureTlsForUpstash = (url) => {
+    if (typeof url !== 'string') return url;
+    if (url.includes('upstash.io') && url.startsWith('redis://')) return url.replace('redis://', 'rediss://');
+    return url;
+};
+
+const CORTEX_REDIS                     = ensureTlsForUpstash(process.env.CORTEX_REDIS || REDIS_URI);
 const CORTEX_PREFIX                    = process.env.CORTEX_PREFIX || 'none';
 const CORTEX_TYPE                      = process.env.CORTEX_TYPE || SERVICE_NAME;
-const OYSTER_REDIS                     = process.env.OYSTER_REDIS || REDIS_URI;
+const OYSTER_REDIS                     = ensureTlsForUpstash(process.env.OYSTER_REDIS || REDIS_URI);
 const OYSTER_PREFIX                    = process.env.OYSTER_PREFIX || 'none';
 
-const CACHE_REDIS                      = process.env.CACHE_REDIS || REDIS_URI;
+const CACHE_REDIS                      = ensureTlsForUpstash(process.env.CACHE_REDIS || REDIS_URI);
 const CACHE_PREFIX                     = process.env.CACHE_PREFIX || `${SERVICE_NAME}:ch`;
 
 const MONGO_URI                        = process.env.MONGO_URI || `mongodb://localhost:27017/${SERVICE_NAME}`;

@@ -1,34 +1,45 @@
-const mongoose      = require('mongoose');
-mongoose.Promise    = global.Promise;
+const mongoose = require('mongoose');
+mongoose.Promise = global.Promise;
 mongoose.set('strictQuery', false);
 
-module.exports = ({uri})=>{
-  //database connection
-  mongoose.connect(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+// Avoid logging full URI (contains credentials)
+const safeUriLabel = (uri) => {
+  if (!uri || typeof uri !== 'string') return '(mongodb)';
+  try {
+    const u = new URL(uri.replace('mongodb+srv://', 'https://').replace('mongodb://', 'http://'));
+    return `${u.hostname}${u.pathname ? u.pathname : ''}`;
+  } catch (_) {
+    return '(mongodb)';
+  }
+};
 
+module.exports = ({ uri }) => {
+  const options = {
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000,
+    maxPoolSize: 10,
+  };
 
-  // When successfully connected
+  mongoose.connect(uri, options);
+
   mongoose.connection.on('connected', function () {
-    console.log('💾  Mongoose default connection open to ' + uri);
+    console.log('💾  Mongoose default connection open to', safeUriLabel(uri));
   });
 
-  // If the connection throws an error
-  mongoose.connection.on('error',function (err) {
-    console.log('💾  Mongoose default connection error: ' + err);
-    console.log('=> if using local mongodb: make sure that mongo server is running \n'+
-      '=> if using online mongodb: check your internet connection \n');
+  mongoose.connection.on('error', function (err) {
+    console.log('💾  Mongoose connection error:', err.message || err);
+    if (err.message && err.message.includes('ECONNRESET')) {
+      console.log('=> ECONNRESET: connection was reset (Atlas/network). Check Atlas IP allowlist and network.');
+    } else {
+      console.log('=> If local: ensure Mongo is running. If Atlas: check network and IP allowlist.');
+    }
   });
 
-  // When the connection is disconnected
   mongoose.connection.on('disconnected', function () {
-    console.log('💾  Mongoose default connection disconnected');
+    console.log('💾  Mongoose default connection disconnected from', safeUriLabel(uri));
   });
 
-  // If the Node process ends, close the Mongoose connection
-  process.on('SIGINT', function() {
+  process.on('SIGINT', function () {
     mongoose.connection.close(function () {
       console.log('💾  Mongoose default connection disconnected through app termination');
       process.exit(0);
