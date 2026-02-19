@@ -1,3 +1,6 @@
+const { nanoid } = require('nanoid');
+const md5 = require('md5');
+
 module.exports = class User {
     constructor({ utils, cache, config, cortex, managers, validators, mongomodels } = {}) {
         this.config = config;
@@ -22,9 +25,27 @@ module.exports = class User {
             return { error: 'Database connection not available. User model not loaded.' };
         }
 
-        // Validation
+        // Required fields (so we don't depend on validator labels)
+        if (!username || (typeof username === 'string' && username.trim().length === 0)) {
+            return { errors: 'Username is required' };
+        }
+        if (!email || (typeof email === 'string' && email.trim().length === 0)) {
+            return { errors: 'Email is required' };
+        }
+        if (!password || (typeof password === 'string' && password.trim().length === 0)) {
+            return { errors: 'Password is required' };
+        }
+
+        // Optional schema validation (length, format) – only treat as failure when we have real errors
         const validationResult = await this.validators.user.register({ username, email, password, role });
-        if (validationResult) return validationResult;
+        if (validationResult !== false && validationResult !== undefined && validationResult !== null) {
+            const isErrorArray = Array.isArray(validationResult) && validationResult.length > 0;
+            const hasErrors = validationResult && typeof validationResult === 'object' && validationResult.errors !== undefined
+                && (typeof validationResult.errors === 'string' || (Array.isArray(validationResult.errors) && validationResult.errors.length > 0));
+            if (isErrorArray || hasErrors) {
+                return Array.isArray(validationResult) ? { errors: validationResult.map(e => e.message || e).join(', ') } : validationResult;
+            }
+        }
 
         // Check for existing superadmin token if trying to create superadmin
         let existingSuperadminToken = null;
@@ -98,22 +119,25 @@ module.exports = class User {
             const user = new this.User(userData);
             const savedUser = await user.save();
 
-            // Generate tokens
-            const longToken = this.tokenManager.genLongToken({
+            // Generate tokens (ensure string for JSON response)
+            const longTokenStr = this.tokenManager.genLongToken({
                 userId: savedUser._id.toString(),
                 userKey: savedUser._id.toString()
             });
+            const longToken = typeof longTokenStr === 'string' ? longTokenStr : (longTokenStr && String(longTokenStr));
 
-            return {
+            // Return plain objects only (no Mongoose docs) so response serializes correctly
+            const out = {
                 user: {
-                    id: savedUser._id,
-                    username: savedUser.username,
-                    email: savedUser.email,
-                    role: savedUser.role,
-                    schoolId: savedUser.schoolId
+                    id: savedUser._id ? savedUser._id.toString() : null,
+                    username: String(savedUser.username || ''),
+                    email: String(savedUser.email || ''),
+                    role: String(savedUser.role || ''),
+                    schoolId: savedUser.schoolId ? savedUser.schoolId.toString() : null
                 },
-                longToken
+                longToken: longToken || ''
             };
+            return out;
         } catch (error) {
             if (error.code === 11000) {
                 return { errors: 'User with this email or username already exists' };
@@ -147,23 +171,24 @@ module.exports = class User {
             const shortToken = this.tokenManager.genShortToken({
                 userId: user._id.toString(),
                 userKey: user._id.toString(),
-                sessionId: require('nanoid')(),
-                deviceId: require('md5')(JSON.stringify(__device || {}))
+                sessionId: nanoid(),
+                deviceId: md5(JSON.stringify(__device || {}))
             });
 
             return {
                 user: {
-                    id: user._id,
-                    username: user.username,
-                    email: user.email,
-                    role: user.role,
-                    schoolId: user.schoolId
+                    id: user._id ? user._id.toString() : null,
+                    username: String(user.username || ''),
+                    email: String(user.email || ''),
+                    role: String(user.role || ''),
+                    schoolId: user.schoolId ? user.schoolId.toString() : null
                 },
                 longToken,
                 shortToken
             };
         } catch (error) {
-            return { error: 'Failed to login', details: error.message };
+            console.error('Login error:', error.message || error);
+            return { errors: 'Failed to login', message: error.message };
         }
     }
 

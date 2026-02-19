@@ -109,15 +109,13 @@ module.exports = class ApiHandler {
 
     async _exec({targetModule, fnName, cb, data}){
         let result = {};
-        
-            try {
-                result = await targetModule[`${fnName}`](data);
-            } catch (err){
-                console.log(`error`, err);
-                result.error = `${fnName} failed to execute`;
-            }
-    
-        if(cb)cb(result);
+        try {
+            result = await targetModule[`${fnName}`](data);
+        } catch (err){
+            console.log(`error`, err);
+            result = { error: `${fnName} failed to execute` };
+        }
+        if (cb) cb(result);
         return result;
     }
 
@@ -151,8 +149,10 @@ module.exports = class ApiHandler {
             /** executed after all middleware finished */
 
             let body = req.body || {};
+            let query = req.query || {};
             let result = await this._exec({targetModule: this.managers[moduleName], fnName, data: {
-                ...body, 
+                ...query,
+                ...body,
                 ...results,
                 res,
                 req,
@@ -162,13 +162,12 @@ module.exports = class ApiHandler {
             if(result.selfHandleResponse){
                 // do nothing if response handeled
             } else {
-                
                 if(result.errors){
                     return this.managers.responseDispatcher.dispatch(res, {ok: false, errors: result.errors});
                 } else if(result.error){
                     return this.managers.responseDispatcher.dispatch(res, {ok: false, message: result.error});
                 } else {
-                    return this.managers.responseDispatcher.dispatch(res, {ok:true, data: result});
+                    return this.managers.responseDispatcher.dispatch(res, {ok: true, data: result});
                 }
             }
         }});
