@@ -6,6 +6,7 @@ const ResponseDispatcher    = require('../managers/response_dispatcher/ResponseD
 const VirtualStack          = require('../managers/virtual_stack/VirtualStack.manager');
 const ValidatorsLoader      = require('./ValidatorsLoader');
 const ResourceMeshLoader    = require('./ResourceMeshLoader');
+const MongoLoader           = require('./MongoLoader');
 const utils                 = require('../libs/utils');
 
 const systemArch            = require('../static_arch/main.system');
@@ -35,7 +36,7 @@ module.exports = class ManagersLoader {
             aeon,
             managers: this.managers, 
             validators: this.validators,
-            // mongomodels: this.mongomodels,
+            mongomodels: this.mongomodels,
             resourceNodes: this.resourceNodes,
         };
         
@@ -47,11 +48,11 @@ module.exports = class ManagersLoader {
             customValidators: require('../managers/_common/schema.validators'),
         });
         const resourceMeshLoader  = new ResourceMeshLoader({})
-        // const mongoLoader      = new MongoLoader({ schemaExtension: "mongoModel.js" });
+        const mongoLoader         = new MongoLoader({ schemaExtension: "mongoModel.js" });
 
         this.validators           = validatorsLoader.load();
         this.resourceNodes        = resourceMeshLoader.load();
-        // this.mongomodels          = mongoLoader.load();
+        this.mongomodels          = mongoLoader.load();
 
     }
 
@@ -66,6 +67,17 @@ module.exports = class ManagersLoader {
         this.managers.shark               = new SharkFin({ ...this.injectable, layers, actions });
         this.managers.timeMachine         = new TimeMachine(this.injectable);
         this.managers.token               = new TokenManager(this.injectable);
+        
+        // Entity Managers
+        const UserManager                 = require('../managers/entities/user/User.manager');
+        const SchoolManager               = require('../managers/entities/school/School.manager');
+        const ClassroomManager            = require('../managers/entities/classroom/Classroom.manager');
+        const StudentManager              = require('../managers/entities/student/Student.manager');
+        
+        this.managers.user                = new UserManager(this.injectable);
+        this.managers.school              = new SchoolManager(this.injectable);
+        this.managers.classroom           = new ClassroomManager(this.injectable);
+        this.managers.student             = new StudentManager(this.injectable);
         /*************************************************************************************************/
         this.managers.mwsExec             = new VirtualStack({ ...{ preStack: [/* '__token', */'__device',] }, ...this.injectable });
         this.managers.userApi             = new ApiHandler({...this.injectable,...{prop:'httpExposed'}});
