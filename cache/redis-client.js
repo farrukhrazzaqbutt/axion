@@ -1,29 +1,43 @@
-
 const Redis = require("ioredis");
 
 const runTest = async (redis, prefix) => {
-  const key = `${prefix}:test:${new Date().getTime()}`;
-  await redis.set(key, "Redis Test Done.");
-  let data = await redis.get(key);
-  console.log(`Cache Test Data: ${data}`);
-  redis.del(key);
-}
+  try {
+    const key = `${prefix}:test:${new Date().getTime()}`;
+    await redis.set(key, "Redis Test Done.");
+    const data = await redis.get(key);
+    console.log(`Cache Test Data: ${data}`);
+    await redis.del(key);
+  } catch (err) {
+    console.log('Redis test failed (non-fatal):', err.message);
+  }
+};
 
 const createClient = ({ prefix, url }) => {
+  const isTls = url && (url.startsWith('rediss://') || url.includes('upstash.io'));
+  const options = {
+    keyPrefix: prefix ? prefix + ":" : "",
+    maxRetriesPerRequest: 3,
+    retryStrategy(times) {
+      const delay = Math.min(times * 100, 3000);
+      return delay;
+    },
+  };
+  if (isTls) {
+    options.tls = { rejectUnauthorized: true };
+  }
 
-  console.log({ prefix, url })
+  const redis = new Redis(url, options);
 
-  const redis = new Redis(url,{
-    keyPrefix: prefix+":"
-  });
-
-  //register client events
   redis.on('error', (error) => {
-    console.log('error', error);
+    console.log('Redis error:', error.message);
   });
 
   redis.on('end', () => {
-    console.log('shutting down service due to lost Redis connection');
+    console.log('Redis connection closed');
+  });
+
+  redis.on('connect', () => {
+    console.log('Redis connected');
   });
 
   runTest(redis, prefix);
