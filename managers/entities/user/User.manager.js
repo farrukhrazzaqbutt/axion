@@ -17,6 +17,11 @@ module.exports = class User {
     }
 
     async register({ username, email, password, role = 'school_admin', schoolId, longToken, req }) {
+        // Check if User model is available
+        if (!this.User) {
+            return { error: 'Database connection not available. User model not loaded.' };
+        }
+
         // Validation
         const validationResult = await this.validators.user.register({ username, email, password, role });
         if (validationResult) return validationResult;
@@ -24,8 +29,9 @@ module.exports = class User {
         // Check for existing superadmin token if trying to create superadmin
         let existingSuperadminToken = null;
         if (role === 'superadmin') {
-            // Check if there are any existing superadmins
-            const existingSuperadmin = await this.User.findOne({ role: 'superadmin', isActive: true });
+            try {
+                // Check if there are any existing superadmins
+                const existingSuperadmin = await this.User.findOne({ role: 'superadmin', isActive: true });
             
             // If superadmins exist, require authentication
             if (existingSuperadmin) {
@@ -62,6 +68,9 @@ module.exports = class User {
                 }
             }
             // If no superadmins exist, allow creating the first one (bootstrap)
+            } catch (err) {
+                return { error: 'Failed to check for existing superadmins', details: err.message };
+            }
         }
 
         try {
